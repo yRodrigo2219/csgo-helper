@@ -1,0 +1,15 @@
+{
+    "dependencies": {
+        "axios": "^0.19.2",
+        "crypto": "^1.0.1",
+        "inquirer": "^7.3.3",
+        "node-bignumber": "^1.2.1",
+        "qs": "^6.9.4"
+    },
+    "name": "csgo-helper",
+    "version": "1.0.0",
+    "main": "index.js",
+    "repository": "https://github.com/yRodrigo2219/csgo-helper.git",
+    "author": "<rodrigo2219dg@gmail.com>",
+    "license": "MIT"
+}
