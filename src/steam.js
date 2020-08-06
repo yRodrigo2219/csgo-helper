@@ -102,40 +102,118 @@ exports.getInventory = async function getInventory() {
             'Cookie': config.headers.cookie,
             'User-Agent': config.headers['user-agent']
         }
-    }).then((res) => {
-        if (res.data.success) {
-            let rginv = res.data.rgInventory;
-            let rgdesc = res.data.rgDescriptions;
+    }).then(async (res) => {
+        try {
+            if (res.data.success) {
+                let rginv = res.data.rgInventory;
+                let rgdesc = res.data.rgDescriptions;
 
-            let inv = [];
+                let diskInv = JSON.parse(fs.readFileSync('./inventory.json'));
+                let alreadyIded = [];
+                let inv = [];
 
-            for (const id in rginv) {
-                let desc = rginv[id].classid + '_' + rginv[id].instanceid;
+                for (const skin of diskInv)
+                    alreadyIded.push(skin.id);
 
-                if (!rgdesc[desc].type.includes('Agent')
-                    && rgdesc[desc].commodity !== 1
-                    && rgdesc[desc].marketable !== 0) {
+                for (const id in rginv)
+                    if (!alreadyIded.includes(id))
+                        await pushItem(inv, rginv, rgdesc, id, steamID);
 
-                    console.log(rgdesc[desc].market_name);
-                    let inspect = rgdesc[desc].actions[0].link.replace('%owner_steamid%', steamID);
-                    inspect = inspect.replace('%assetid%', id);
-                    inv.push({
-                        name: rgdesc[desc].market_name,
-                        id,
-                        classid: rginv[id].classid,
-                        instanceid: rginv[id].instanceid,
-                        float: -1,
-                        inspect
-                    });
-                }
+                fs.writeFileSync('./inventory.json', JSON.stringify(inv));
+
+                console.log('Inventory updated!');
+
+            } else {
+                console.warn('\x1b[31m%s\x1b[0m', "Error retrieving player inventory!");
             }
+        } catch (err) {
+            if (res.data.success) {
+                let rginv = res.data.rgInventory;
+                let rgdesc = res.data.rgDescriptions;
 
-            fs.writeFileSync('./inventory.json', JSON.stringify(inv));
+                let inv = [];
 
-            console.log('Inventory updated!');
-        } else {
-            console.warn('\x1b[31m%s\x1b[0m', "Error retrieving player inventory!");
+                for (const id in rginv)
+                    await pushItem(inv, rginv, rgdesc, id, steamID);
+
+                fs.writeFileSync('./inventory.json', JSON.stringify(inv));
+
+                console.log('Inventory updated!');
+            } else {
+                console.warn('\x1b[31m%s\x1b[0m', "Error retrieving player inventory!");
+            }
         }
+    });
+}
+
+function sellItem(sessionid, assetid, price, steamID) {
+    let data = fs.readFileSync('./config.json');
+    const config = JSON.parse(data);
+
+    let params = {
+        sessionid,
+        appid: 730,
+        contextid: 2,
+        assetid,
+        amount: 1,
+        price
+    };
+
+    return axios.post(`https://steamcommunity.com/market/sellitem/`, qs(params), {
+        headers: {
+            'Cookie': config.headers.cookie,
+            'User-Agent': config.headers['user-agent'],
+            'Referer': `https://steamcommunity.com/profiles/${steamID}/inventory`
+        }
+    }).then(res => {
+        if (res.data.success) {
+
+        } else {
+            console.log('\x1b[31m%s\x1b[0m', `Error listing item! ${assetid}`);
+        }
+    });
+}
+
+async function pushItem(inv, rginv, rgdesc, id, steamID) {
+    let desc = rginv[id].classid + '_' + rginv[id].instanceid;
+
+    if (!rgdesc[desc].type.includes('Agent')
+        && rgdesc[desc].commodity !== 1
+        && rgdesc[desc].marketable !== 0) {
+
+        let inspect = rgdesc[desc].actions[0].link.replace('%owner_steamid%', steamID);
+        inspect = inspect.replace('%assetid%', id);
+
+        let float;
+        let flag = true;
+        while (flag) {
+            float = await getItemFloat(inspect);
+            float != -1 ? flag = false : null;
+        }
+
+        console.log(rgdesc[desc].market_name + ' - ' + float);
+
+        inv.push({
+            name: rgdesc[desc].market_name,
+            id,
+            classid: rginv[id].classid,
+            instanceid: rginv[id].instanceid,
+            float,
+            inspect
+        });
+    }
+}
+
+function getItemFloat(inspectLink) {
+    return axios.get(`https://api.csgofloat.com/?url=${inspectLink}`).then((res) => {
+        if (res.code) {
+            console.log('\x1b[31m%s\x1b[0m', `Codigo de erro "${res.data.code}" na requisição da api!`);
+            return -1;
+        }
+        return res.data.iteminfo.floatvalue;
+    }).catch(() => {
+        console.log('\x1b[31m%s\x1b[0m', "Erro na requisição da api!");
+        return -1;
     });
 }
 
