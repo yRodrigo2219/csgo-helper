@@ -35,7 +35,8 @@ exports.login = async function login({ username, password, twoF = null }) {
     }).then((res) => {
         if (res.data.success) {
             // saving cookies
-            res.headers['set-cookie'].push(`sessionid=${generateSessionID()}; `);
+            let sessionid = generateSessionID();
+            res.headers['set-cookie'].push(`sessionid=${sessionid}; `);
 
             let cookie = '';
             for (c of res.headers['set-cookie']) {
@@ -46,6 +47,7 @@ exports.login = async function login({ username, password, twoF = null }) {
             }
 
             config.headers.cookie = cookie;
+            config.headers.sessionid = sessionid;
 
             fs.writeFileSync('./config.json', JSON.stringify(config));
             console.log('Success!');
@@ -64,7 +66,9 @@ exports.isLoggedIn = function isLoggedIn() {
         const config = JSON.parse(data);
 
         // new sessionid every time you start
-        //config.headers.cookie = config.headers.cookie.replace(/sessionid=[0-9a-f]+/, `sessionid=${generateSessionID()}`);
+        let sessionid = generateSessionID();
+        //config.headers.cookie = config.headers.cookie.replace(/sessionid=[0-9a-f]+/, `sessionid=${sessionid}`);
+        //config.headers.sessionid = sessionid;
 
         return axios.get(`https://steamcommunity.com/chat/clientjstoken`, {
             headers: {
@@ -79,7 +83,8 @@ exports.isLoggedIn = function isLoggedIn() {
         const config = {
             headers: {
                 cookie: '',
-                'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36'
+                'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/76.0.3809.100 Safari/537.36',
+                sessionid: ''
             },
             'sell-orders': {
 
@@ -109,15 +114,22 @@ exports.getInventory = async function getInventory() {
                 let rgdesc = res.data.rgDescriptions;
 
                 let diskInv = JSON.parse(fs.readFileSync('./inventory.json'));
-                let alreadyIded = [];
+                let ids = [];
+                let invSkins = {};
                 let inv = [];
 
-                for (const skin of diskInv)
-                    alreadyIded.push(skin.id);
+                for (const skin of diskInv) {
+                    ids.push(skin.id);
+                    invSkins[skin.id] = skin;
+                }
+
 
                 for (const id in rginv)
-                    if (!alreadyIded.includes(id))
+                    if (!ids.includes(id)) {
                         await pushItem(inv, rginv, rgdesc, id, steamID);
+                    } else {
+                        inv.push(invSkins[id]);
+                    }
 
                 fs.writeFileSync('./inventory.json', JSON.stringify(inv));
 
@@ -146,6 +158,28 @@ exports.getInventory = async function getInventory() {
     });
 }
 
+exports.sellList = async function sellList() {
+    let data = fs.readFileSync('./config.json');
+    const config = JSON.parse(data);
+
+    data = fs.readFileSync('./inventory.json');
+    const inv = JSON.parse(data);
+
+    const sellOrders = Object.keys(config['sell-orders']);
+    let sessionid = config.headers.sessionid;
+    let steamID = await getSteamID();
+
+    for (const skin of inv)
+        if (sellOrders.includes(skin.name))
+            if (skin.float > config['sell-orders'][skin.name]['max-float']) {
+                await sellItem(sessionid, skin.id, config['sell-orders'][skin.name].price, steamID);
+                console.log(`Selling ${skin.name} ${skin.float}... (${skin.id})`)
+            }
+
+    console.log('All items were listed!');
+    await this.getInventory();
+}
+
 function sellItem(sessionid, assetid, price, steamID) {
     let data = fs.readFileSync('./config.json');
     const config = JSON.parse(data);
@@ -159,7 +193,7 @@ function sellItem(sessionid, assetid, price, steamID) {
         price
     };
 
-    return axios.post(`https://steamcommunity.com/market/sellitem/`, qs(params), {
+    return axios.post(`https://steamcommunity.com/market/sellitem/`, qs.stringify(params), {
         headers: {
             'Cookie': config.headers.cookie,
             'User-Agent': config.headers['user-agent'],
@@ -167,7 +201,7 @@ function sellItem(sessionid, assetid, price, steamID) {
         }
     }).then(res => {
         if (res.data.success) {
-
+            return res.data;
         } else {
             console.log('\x1b[31m%s\x1b[0m', `Error listing item! ${assetid}`);
         }

@@ -7,8 +7,8 @@ Designed for CSGO inventory cleaning to help trading up. Easy selling high float
 * Save Cookies to Json ( bad idea, but saves the pain of logging in every time )
 * Save Inventory Skins to Json
 * Get Whole Inventory Float
+* Automatic Sell List
 
 # TODOS
-* Automatic Sell List
-* CSGO Inventory Skins Viewer
-* Simulate Trade-up
+* Show CSGO Inventory
+* Add Item to Sell List
